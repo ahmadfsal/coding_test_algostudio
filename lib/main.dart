@@ -1,3 +1,7 @@
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:coding_test_algostudio/meme_detail.dart';
+import 'package:coding_test_algostudio/meme_model.dart';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 
 void main() {
@@ -7,109 +11,124 @@ void main() {
 class MyApp extends StatelessWidget {
   const MyApp({Key? key}) : super(key: key);
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      title: 'Flutter Demo',
+      title: 'MimGenerator',
       theme: ThemeData(
-        // This is the theme of your application.
-        //
-        // Try running your application with "flutter run". You'll see the
-        // application has a blue toolbar. Then, without quitting the app, try
-        // changing the primarySwatch below to Colors.green and then invoke
-        // "hot reload" (press "r" in the console where you ran "flutter run",
-        // or simply save your changes to "hot reload" in a Flutter IDE).
-        // Notice that the counter didn't reset back to zero; the application
-        // is not restarted.
         primarySwatch: Colors.blue,
       ),
-      home: const MyHomePage(title: 'Flutter Demo Home Page'),
+      home: const MyHomePage(),
     );
   }
 }
 
 class MyHomePage extends StatefulWidget {
-  const MyHomePage({Key? key, required this.title}) : super(key: key);
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
+  const MyHomePage({Key? key}) : super(key: key);
 
   @override
   State<MyHomePage> createState() => _MyHomePageState();
 }
 
 class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+  Future<List<MemeModel>?> _fetchListMeme() async {
+    try {
+      Response response = await Dio().get('https://api.imgflip.com/get_memes');
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+      if (response.data['success']) {
+        if (response.data['data'] != null) {
+          if (response.data['data']['memes'] != null) {
+            return (response.data['data']['memes'] as List)
+                .map((e) => MemeModel.fromJson(e))
+                .toList();
+          }
+          return null;
+        }
+        return null;
+      }
+
+      return null;
+    } catch (_) {
+      return null;
+    }
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
     return Scaffold(
-      appBar: AppBar(
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
+      appBar: AppBar(title: const Text('MimGenerator'), centerTitle: true),
+      body: FutureBuilder(
+        future: _fetchListMeme(),
+        builder: (context, snapshot) {
+          switch (snapshot.connectionState) {
+            case ConnectionState.none:
+            case ConnectionState.waiting:
+            case ConnectionState.active:
+              return const Center(
+                child: CircularProgressIndicator(),
+              );
+            case ConnectionState.done:
+              if (snapshot.hasData) {
+                List<MemeModel> listMeme = snapshot.data as List<MemeModel>;
+                return _gridItem(listMeme);
+              } else {
+                return Center(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const Text('Data tidak ditemukan'),
+                      const SizedBox(height: 8.0),
+                      OutlinedButton.icon(
+                        onPressed: () {
+                          _fetchListMeme();
+                          setState(() {});
+                        },
+                        icon: const Icon(Icons.refresh),
+                        label: const Text('Refresh'),
+                      )
+                    ],
+                  ),
+                );
+              }
+          }
+        },
       ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Invoke "debug painting" (press "p" in the console, choose the
-          // "Toggle Debug Paint" action from the Flutter Inspector in Android
-          // Studio, or the "Toggle Debug Paint" command in Visual Studio Code)
-          // to see the wireframe for each widget.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: <Widget>[
-            const Text(
-              'You have pushed the button this many times:',
-            ),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headline4,
-            ),
-          ],
+    );
+  }
+
+  Widget _gridItem(List<MemeModel> listMeme) {
+    return RefreshIndicator(
+      onRefresh: () async {
+        _fetchListMeme();
+        setState(() {});
+      },
+      child: GridView.builder(
+        physics: const BouncingScrollPhysics(),
+        padding: const EdgeInsets.all(16.0),
+        gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+          crossAxisCount: 3,
+          crossAxisSpacing: 16.0,
+          mainAxisSpacing: 16.0,
         ),
+        itemBuilder: (context, index) {
+          MemeModel item = listMeme[index];
+          return GestureDetector(
+            onTap: () {
+              Navigator.push(context, MaterialPageRoute(builder: (_) {
+                return MemeDetailPage(item);
+              }));
+            },
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(8.0),
+              child: CachedNetworkImage(
+                imageUrl: item.url!,
+                fit: BoxFit.fill,
+              ),
+            ),
+          );
+        },
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ), // This trailing comma makes auto-formatting nicer for build methods.
     );
   }
 }
